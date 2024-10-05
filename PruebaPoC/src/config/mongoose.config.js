@@ -1,21 +1,21 @@
 // config/mongoose.config.js
-const mongoose = require('mongoose'); 
-//Nombre de la BDD
-const db_name = 'POC_BELEN' 
+const mongoose = require('mongoose');
 
-mongoose.set("strictQuery", false);
+// Función para obtener el string de conexión basado en el nombre de la base de datos
+const getConnectionString = (dbName) => `mongodb://127.0.0.1:27017/${dbName}`;
 
+mongoose.set("strictQuery", false); // Esta configuración aún es válida.
+
+// Conectar a la base de datos de Retroalimentacion
 const connectDB = async () => {
   try {
-    // Conectar con MongoDB
-    await mongoose.connect('mongodb://127.0.0.1:27017/' + db_name, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+    await mongoose.connect(getConnectionString('Retroalimentacion'), {
+      serverSelectionTimeoutMS: 5000, // Timeout en caso de que el servidor no responda
     });
-    console.log('Conectado a MongoDB');
+    console.log('Conectado a la base de datos Retroalimentacion');
   } catch (err) {
-    console.error('Error al conectar a MongoDB:', err);
-    process.exit(1);
+    console.error('Error al conectar a la base de datos Retroalimentacion:', err);
+    process.exit(1); // Salir de la app si la conexión falla
   }
 };
 

@@ -1,48 +1,64 @@
 const Transaccion = require('../models/Transaccion');
 const Retroalimentacion = require('../models/Retroalimentacion');
-const axios = require('axios');
 const historialController = require('./historial.controller');
+const { llamarGPT } = require('../services/gptService'); // Importar el servicio de GPT
+const Historial = require('../models/Historial');
 require('dotenv').config();  // Para cargar las variables de entorno
 
 // Función para validar los datos
-const validarDatos = ({ id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, tipo_retroalimentacion }) => {
-    if (!id_estudiante || !id_tarea || !descripcion_tarea || !codigo_estudiante || !tipo_retroalimentacion) {
+const validarDatos = ({ id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, codigo_esperado, tipo_retroalimentacion }) => {
+    if (!id_estudiante || !id_tarea || !descripcion_tarea || !codigo_estudiante || !codigo_esperado || !tipo_retroalimentacion) {
         throw new Error('Faltan parámetros obligatorios');
     }
 };
 
-// Función para limpiar el código del estudiante usando regex
-const limpiarCodigo = (codigo) => {
-    return codigo.replace(/[\s\n\r]+|["]+/g, '').trim(); // Limpia saltos de línea, comillas dobles y espacios en blanco
-};
+// Función para limpiar el código y comparar el codigo del estudiante usando regex
+function limpiarCodigo(codigo) {
+    return codigo.replace(/\s+/g, ''); // Reemplazar saltos de línea y espacios en blanco
+}
+// //Funcion Busqueda de Codigo
+// function buscarCodigoHistorial(codigo,descripciones,nombreRetroalimentacion) {
+//     codigo = limpiarCodigo(codigo)
+//     for (descripcion in descripciones)
+//     {
+//         codigo_busqueda = limpiarCodigo(descripcion.codigo_estudiante)
+//         if (codigo_busqueda == codigo && nombreRetroalimentacion == descripcion.nombreRetroalimentacion)
+//         {
+//             return true;
+//         }
+//     }
+// }
+// //Funcion Busqueda de Historial de Estudiante 
+// function buscarHistorialEstudiante(idEstudiante){
+//     for(Historial in id_estudiante){
+//         if(idEstudiante == id_estudiante){
+//         return id_estudiante.descripcion;}
+//     }
+// }
+
+// Función para buscar en el historial si ya existe una transacción con el mismo código de estudiante y retroalimentación
+async function buscarCodigoHistorial(id_estudiante, codigo_estudiante, tipo_retroalimentacion) {
+    const historial = await Historial.findOne({ id_estudiante });
+
+    if (!historial) {
+        return false; // No hay historial previo, así que no hay repetición
+    }
+
+    // Verificar si alguna descripción tiene el mismo código de estudiante y tipo de retroalimentación
+    return historial.descripcion.some(descripcion =>
+        limpiarCodigo(descripcion.codigo_estudiante) === limpiarCodigo(codigo_estudiante) &&
+        descripcion.tipo_retroalimentacion === tipo_retroalimentacion
+    );
+}
 
 // Función para crear el prompt a enviar a GPT
 const crearPrompt = (retroalimentacion, descripcion_tarea, codigo_esperado, codigo_estudiante) => {
     return `
-    ${retroalimentacion.prompt}\n
+    ${retroalimentacion}\n
     Descripción de la tarea: ${descripcion_tarea}\n
-    Código esperado:\n${codigo_esperado}\n
+    Salida esperada:\n${codigo_esperado}\n
     Código del estudiante:\n${codigo_estudiante}
     `;
-};
-
-// Función para llamar a la API de GPT y recibir la retroalimentación
-const llamarGPT = async (prompt) => {
-    try {
-        const respuestaGPT = await axios.post('https://api.openai.com/v1/completions', {
-            prompt: prompt,
-            max_tokens: 500, // Ajusta según sea necesario
-            model: 'gpt-3.5-turbo', // O el modelo que estés usando
-        }, {
-            headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` // Usa la API key desde el .env
-            }
-        });
-
-        return respuestaGPT.data.choices[0].text.trim();
-    } catch (error) {
-        throw new Error('Error al llamar a la API de GPT');
-    }
 };
 
 // Controlador de transacciones
@@ -54,53 +70,69 @@ transaccionController.procesarTransaccion = async (req, res) => {
         // 1. Validar los datos que llegan en la solicitud
         validarDatos(req.body);
 
-        const { id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, tipo_retroalimentacion } = req.body;
+        const { id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, codigo_esperado, tipo_retroalimentacion } = req.body;
 
-        // 2. Limpiar el código del estudiante
-        const codigoLimpio = limpiarCodigo(codigo_estudiante);
-
-        // 3. Buscar el código esperado para esta tarea en la base de datos (Transaccion)
-        const transaccion = await Transaccion.findOne({ id_tarea });
-        if (!transaccion) {
-            return res.status(404).json({ message: 'Tarea no encontrada' });
+        // 2. Buscar en el historial si ya existe una transacción con el mismo código y retroalimentación
+        const codigoRepetido = await buscarCodigoHistorial(id_estudiante, codigo_estudiante, tipo_retroalimentacion);
+        if (codigoRepetido) {
+            return res.status(400).json({ message: 'Ya has realizado esta solicitud con el mismo código y retroalimentación.' });
         }
 
-        const { codigo_esperado } = transaccion;
-
-        // 4. Buscar el tipo de retroalimentación en la base de datos (Retroalimentacion)
+        // 3. Buscar el prompt en la base de datos de retroalimentaciones
         const retroalimentacion = await Retroalimentacion.findOne({ tipo_retroalimentacion });
         if (!retroalimentacion) {
-            return res.status(404).json({ message: 'Tipo de retroalimentación no encontrado' });
+            return res.status(400).json({ message: 'No se encontró el tipo de retroalimentación solicitado.' });
         }
 
-        // 5. Crear el prompt para la IA
-        const promptGPT = crearPrompt(retroalimentacion, descripcion_tarea, codigo_esperado, codigoLimpio);
+        // 4. Crear el prompt para la IA usando los datos recibidos
+        const promptGPT = crearPrompt(retroalimentacion.prompt, descripcion_tarea, codigo_esperado, codigo_estudiante);
 
-        // 6. Llamar a la API de GPT para obtener la retroalimentación
-        const respuestaRetroalimentacion = await llamarGPT(promptGPT);
+        // 5. Llamar a la API de GPT para obtener la retroalimentación
+        let respuestaRetroalimentacion;
+        try {
+            respuestaRetroalimentacion = await llamarGPT([
+                {
+                    role: "system",
+                    content: promptGPT
+                }
+            ]);
+        } catch (gptError) {
+            console.error('Error al llamar a la API de GPT:', gptError);
+            return res.status(500).json({ message: 'Error al obtener la retroalimentación de GPT.' });
+        }
 
-        // 7. Actualizar la transacción con la retroalimentación generada por GPT
-        transaccion.codigo_gpt = respuestaRetroalimentacion;
-        await transaccion.save();
+        // 6. Crear una nueva transacción y guardar en la base de datos
+        const nuevaTransaccion = new Transaccion({
+            id_estudiante,
+            id_tarea,
+            descripcion_tarea,
+            codigo_esperado,
+            codigo_gpt: respuestaRetroalimentacion, // Aquí guardas la respuesta de GPT
+            codigo_estudiante,
+            tipo_retroalimentacion
+        });
 
-        // 8. Llamar al controlador de historial para almacenar los datos
+        await nuevaTransaccion.save(); // Guardar la transacción en la base de datos
+
+        // 7. Llamar al controlador de historial para almacenar los datos
         await historialController.guardarHistorial({
             id_estudiante,
             id_tarea,
             descripcion_tarea,
             codigo_esperado,
-            codigo_estudiante: codigoLimpio,
-            respuesta_gpt: respuestaRetroalimentacion
+            codigo_estudiante,
+            codigo_gpt: respuestaRetroalimentacion,
+            tipo_retroalimentacion  // Asegúrate de que estás pasando este campo
         });
 
-        // 9. Devolver la respuesta de la IA al cliente (estudiante)
+        // 8. Devolver la respuesta de la IA al cliente (estudiante)
         return res.status(200).json({
             message: 'Transacción procesada correctamente',
             retroalimentacion: respuestaRetroalimentacion
         });
 
     } catch (error) {
-        console.error(error);
+        console.error('Error en el servidor:', error);
         return res.status(500).json({ message: 'Error en el servidor', error: error.message });
     }
 };

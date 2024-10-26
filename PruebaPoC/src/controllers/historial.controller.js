@@ -10,17 +10,6 @@ historialController.guardarHistorial = async ({ id_estudiante, id_tarea, descrip
         // Buscar si ya existe un historial para ese estudiante y tarea
         let historial = await Historial.findOne({ id_estudiante, id_tarea });
 
-        // Si no existe, se crea uno nuevo
-        if (!historial) {
-            historial = new Historial({
-                id_estudiante,
-                id_tarea,
-                descripcion_tarea,
-                codigo_esperado,
-                descripcion: []
-            });
-        }
-
         // Crear una nueva descripción
         const nuevaDescripcion = new Descripcion({
             codigo_gpt,
@@ -28,10 +17,21 @@ historialController.guardarHistorial = async ({ id_estudiante, id_tarea, descrip
             tipo_retroalimentacion 
         });
 
-        // Agregar la nueva descripción al historial
-        historial.descripcion.push(nuevaDescripcion);
+        if (historial) {
+            // Si el historial ya existe, agrega la nueva descripción al array
+            historial.descripcion.push(nuevaDescripcion);
+        } else {
+            // Si no existe, crea un nuevo historial con la nueva descripción
+            historial = new Historial({
+                id_estudiante,
+                id_tarea,
+                descripcion_tarea,
+                codigo_esperado,
+                descripcion: [nuevaDescripcion]
+            });
+        }
 
-        // Guardar el historial actualizado
+        // Guardar el historial actualizado o nuevo
         await historial.save();
     } catch (error) {
         console.error('Error al guardar el historial:', error);

@@ -12,43 +12,22 @@ const validarDatos = ({ id_estudiante, id_tarea, descripcion_tarea, codigo_estud
     }
 };
 
-// Función para limpiar el código y comparar el codigo del estudiante usando regex
-function limpiarCodigo(codigo) {
-    return codigo.replace(/\s+/g, ''); // Reemplazar saltos de línea y espacios en blanco
-}
-// //Funcion Busqueda de Codigo
-// function buscarCodigoHistorial(codigo,descripciones,nombreRetroalimentacion) {
-//     codigo = limpiarCodigo(codigo)
-//     for (descripcion in descripciones)
-//     {
-//         codigo_busqueda = limpiarCodigo(descripcion.codigo_estudiante)
-//         if (codigo_busqueda == codigo && nombreRetroalimentacion == descripcion.nombreRetroalimentacion)
-//         {
-//             return true;
-//         }
-//     }
-// }
-// //Funcion Busqueda de Historial de Estudiante 
-// function buscarHistorialEstudiante(idEstudiante){
-//     for(Historial in id_estudiante){
-//         if(idEstudiante == id_estudiante){
-//         return id_estudiante.descripcion;}
-//     }
-// }
-
 // Función para buscar en el historial si ya existe una transacción con el mismo código de estudiante y retroalimentación
-async function buscarCodigoHistorial(id_estudiante, codigo_estudiante, tipo_retroalimentacion) {
-    const historial = await Historial.findOne({ id_estudiante });
+async function buscarCodigoHistorial(id_estudiante, id_tarea, codigo_estudiante, tipo_retroalimentacion) {
+    const historial = await Historial.findOne({ id_estudiante, id_tarea });
 
     if (!historial) {
-        return false; // No hay historial previo, así que no hay repetición
+        return null; // No hay historial previo, así que no hay repetición
     }
 
-    // Verificar si alguna descripción tiene el mismo código de estudiante y tipo de retroalimentación
-    return historial.descripcion.some(descripcion =>
-        limpiarCodigo(descripcion.codigo_estudiante) === limpiarCodigo(codigo_estudiante) &&
+    // Busca una coincidencia en las descripciones
+    const descripcionCoincidente = historial.descripcion.find(descripcion =>
+        descripcion.codigo_estudiante === codigo_estudiante &&
         descripcion.tipo_retroalimentacion === tipo_retroalimentacion
     );
+
+    // Retorna la descripción coincidente o null si no existe
+    return descripcionCoincidente || null;
 }
 
 // Función para crear el prompt a enviar a GPT
@@ -71,11 +50,14 @@ transaccionController.procesarTransaccion = async (req, res) => {
         validarDatos(req.body);
 
         const { id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, codigo_esperado, tipo_retroalimentacion } = req.body;
-
+        console.log("codigo estudiante:");
+        console.log(codigo_estudiante);
+        
         // 2. Buscar en el historial si ya existe una transacción con el mismo código y retroalimentación
-        const codigoRepetido = await buscarCodigoHistorial(id_estudiante, codigo_estudiante, tipo_retroalimentacion);
-        if (codigoRepetido) {
-            return res.status(400).json({ message: 'Ya has realizado esta solicitud con el mismo código y retroalimentación.' });
+        const descripcionCoincidente = await buscarCodigoHistorial(id_estudiante, id_tarea, codigo_estudiante, tipo_retroalimentacion);
+        if (descripcionCoincidente) {
+            console.log(`Código repetido encontrado: ${descripcionCoincidente.codigo_estudiante || 'Código no definido'}`);
+            //return res.status(400).json({ message: 'Ya has realizado esta solicitud con el mismo código y retroalimentación.' });
         }
 
         // 3. Buscar el prompt en la base de datos de retroalimentaciones
@@ -107,7 +89,7 @@ transaccionController.procesarTransaccion = async (req, res) => {
             id_tarea,
             descripcion_tarea,
             codigo_esperado,
-            codigo_gpt: respuestaRetroalimentacion, // Aquí guardas la respuesta de GPT
+            codigo_gpt: respuestaRetroalimentacion, // Aquí se almacena la respuesta de GPT
             codigo_estudiante,
             tipo_retroalimentacion
         });
@@ -130,6 +112,7 @@ transaccionController.procesarTransaccion = async (req, res) => {
             message: 'Transacción procesada correctamente',
             retroalimentacion: respuestaRetroalimentacion
         });
+
 
     } catch (error) {
         console.error('Error en el servidor:', error);

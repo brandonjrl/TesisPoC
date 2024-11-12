@@ -1,7 +1,7 @@
 const OpenAIApi = require('openai');
 require('dotenv').config();  // Cargar las variables de entorno
 
-const MODEL_NAME = 'gpt-3.5-turbo';
+const MODEL_NAME = 'gpt-4o-mini';
 
 let openai;
 
@@ -58,7 +58,7 @@ const calculateCost = (tokenUsed, model, tokenType) => {
  * @param {Number} temperature - Parámetro de temperatura para GPT (controla la creatividad de la respuesta).
  * @returns {Promise<String>} - Retorna solo el mensaje de GPT como un string.
  */
-const llamarGPT = async (messages, maxTokens = 800, temperature = 0.05) => {
+const llamarGPT = async (messages, maxTokens = 800, temperature = 0.3) => {
     try {
         const response = await openai.chat.completions.create({
             model: MODEL_NAME,

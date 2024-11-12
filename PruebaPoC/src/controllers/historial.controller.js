@@ -5,7 +5,7 @@ const Descripcion = require('../models/Descripcion');
 const historialController = {};
 
 // Método para guardar el historial
-historialController.guardarHistorial = async ({ id_estudiante, id_tarea, descripcion_tarea, codigo_esperado, codigo_estudiante, codigo_gpt, tipo_retroalimentacion }) => {
+historialController.guardarHistorial = async ({ id_estudiante, id_tarea, descripcion_tarea, salida_esperada, codigo_estudiante, codigo_gpt, tipo_retroalimentacion }) => {
     try {
         // Buscar si ya existe un historial para ese estudiante y tarea
         let historial = await Historial.findOne({ id_estudiante, id_tarea });
@@ -26,7 +26,7 @@ historialController.guardarHistorial = async ({ id_estudiante, id_tarea, descrip
                 id_estudiante,
                 id_tarea,
                 descripcion_tarea,
-                codigo_esperado,
+                salida_esperada,
                 descripcion: [nuevaDescripcion]
             });
         }

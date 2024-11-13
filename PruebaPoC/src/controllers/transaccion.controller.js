@@ -31,15 +31,17 @@ async function buscarCodigoHistorial(id_estudiante, id_tarea, codigo_estudiante,
 }
 
 // Función para concatenar el Promt
-const crearPrompt = (retroalimentacion, descripcion_tarea, salida_esperada,) => {
+const crearPrompt = (retroalimentacion, descripcion_tarea, salida_esperada, test_case = null) => {
     return `
     ${retroalimentacion}\n
     Descripción de la tarea: ${descripcion_tarea}\n
     Salida esperada:\n${salida_esperada}\n
+    ${test_case ? `Test Case:\n${JSON.stringify(test_case)}` : ''}
     `;
 };
+
 // Funcion para crear promt Usuario
-const crearPromptUsuario = ( codigo_estudiante) =>{
+const crearPromptUsuario = (codigo_estudiante) => {
     return `
     Código del estudiante:\n${codigo_estudiante}
     `;
@@ -59,9 +61,8 @@ transaccionController.procesarTransaccion = async (req, res) => {
             return res.status(400).json({ message: validationError.message });
         }
 
-        const { id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, salida_esperada, tipo_retroalimentacion } = req.body;
-        console.log("codigo estudiante:");
-        console.log(codigo_estudiante);
+        const { id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, salida_esperada, tipo_retroalimentacion, test_case } = req.body;
+        console.log("Código estudiante:", codigo_estudiante);
         
         // 2. Buscar en el historial si ya existe una transacción con el mismo código y retroalimentación
         const descripcionCoincidente = await buscarCodigoHistorial(id_estudiante, id_tarea, codigo_estudiante, tipo_retroalimentacion);
@@ -76,17 +77,17 @@ transaccionController.procesarTransaccion = async (req, res) => {
             return res.status(400).json({ message: 'No se encontró el tipo de retroalimentación solicitado.' });
         }
 
-        // 4. Crear el prompt para la IA usando los datos recibidos
-        const promptGPT = crearPrompt(retroalimentacion.prompt, descripcion_tarea, salida_esperada);
-        console.log("prompt System");
+        // 4. Crear el prompt para la IA usando los datos recibidos, incluyendo test_case si existe
+        const promptGPT = crearPrompt(retroalimentacion.prompt, descripcion_tarea, salida_esperada, test_case || null);
+        console.log("Prompt System");
         console.log(promptGPT);
 
         // 5. Crear el prompt de usuario
         const promptUsuario = crearPromptUsuario(codigo_estudiante);
-        console.log("prompt usuario");
+        console.log("Prompt Usuario");
         console.log(promptUsuario);
 
-        // 5. Llamar a la API de GPT para obtener la retroalimentación
+        // 6. Llamar a la API de GPT para obtener la retroalimentación
         let respuestaRetroalimentacion;
         try {
             respuestaRetroalimentacion = await llamarGPT([
@@ -104,7 +105,7 @@ transaccionController.procesarTransaccion = async (req, res) => {
             return res.status(500).json({ message: 'Error al obtener la retroalimentación de GPT.' });
         }
 
-        // 6. Crear una nueva transacción y guardar en la base de datos
+        // 7. Crear una nueva transacción y guardar en la base de datos
         const nuevaTransaccion = new Transaccion({
             id_estudiante,
             id_tarea,
@@ -112,12 +113,13 @@ transaccionController.procesarTransaccion = async (req, res) => {
             salida_esperada,
             codigo_gpt: respuestaRetroalimentacion, // Aquí se almacena la respuesta de GPT
             codigo_estudiante,
-            tipo_retroalimentacion
+            tipo_retroalimentacion,
+            test_case: test_case || null // Almacenar test_case como null si no está definido
         });
 
         await nuevaTransaccion.save(); // Guardar la transacción en la base de datos
 
-        // 7. Llamar al controlador de historial para almacenar los datos
+        // 8. Llamar al controlador de historial para almacenar los datos
         await historialController.guardarHistorial({
             id_estudiante,
             id_tarea,
@@ -125,10 +127,10 @@ transaccionController.procesarTransaccion = async (req, res) => {
             salida_esperada,
             codigo_estudiante,
             codigo_gpt: respuestaRetroalimentacion,
-            tipo_retroalimentacion  // Asegúrate de que estás pasando este campo
+            tipo_retroalimentacion
         });
 
-        // 8. Devolver la respuesta de la IA al cliente (estudiante)
+        // 9. Devolver la respuesta de la IA al cliente (estudiante)
         return res.status(200).json({
             message: 'Transacción procesada correctamente',
             retroalimentacion: respuestaRetroalimentacion
@@ -139,6 +141,5 @@ transaccionController.procesarTransaccion = async (req, res) => {
         return res.status(500).json({ message: 'Error en el servidor', error: error.message });
     }
 };
-
 
 module.exports = transaccionController;

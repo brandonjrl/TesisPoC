@@ -1,9 +1,10 @@
+// Importar modelos y servicios necesarios
 const Transaccion = require('../models/Transaccion');
 const Retroalimentacion = require('../models/Retroalimentacion');
 const historialController = require('./historial.controller');
 const { llamarGPT } = require('../services/gptService'); // Importar el servicio de GPT
 const Historial = require('../models/Historial');
-require('dotenv').config();  // Para cargar las variables de entorno
+require('dotenv').config(); // Para cargar las variables de entorno
 
 // Función para validar los datos
 const validarDatos = ({ id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, salida_esperada, tipo_retroalimentacion }) => {
@@ -20,7 +21,6 @@ async function buscarCodigoHistorial(id_estudiante, id_tarea, codigo_estudiante,
         return { descripcionCoincidente: null, pistaRepetida: null };
     }
 
-    // Buscar si existe una coincidencia en código y retroalimentación
     const descripcionCoincidente = historial.descripcion.find(descripcion =>
         descripcion.codigo_estudiante === codigo_estudiante &&
         descripcion.tipo_retroalimentacion === tipo_retroalimentacion
@@ -32,8 +32,8 @@ async function buscarCodigoHistorial(id_estudiante, id_tarea, codigo_estudiante,
         try {
             const gptResponse = descripcionCoincidente.codigo_gpt;
             if (typeof gptResponse === 'object' || gptResponse.startsWith('{')) {
-                const parsedGptResponse = typeof gptResponse === 'object' 
-                    ? gptResponse 
+                const parsedGptResponse = typeof gptResponse === 'object'
+                    ? gptResponse
                     : JSON.parse(gptResponse);
 
                 pistaRepetida = parsedGptResponse?.pista || null;
@@ -57,7 +57,7 @@ const crearPrompt = (retroalimentacion, descripcion_tarea, salida_esperada, test
 };
 
 // Función para crear prompt Usuario
-const crearPromptUsuario = (codigo_estudiante, pistaRepetida = null) => {
+const crearPromptUsuario = (codigo_estudiante, pistaRepetida = null, contexto_adicional = null, salida_compilador = null) => {
     let prompt = `
     Código del estudiante:\n${codigo_estudiante}
     `;
@@ -66,6 +66,17 @@ const crearPromptUsuario = (codigo_estudiante, pistaRepetida = null) => {
         prompt += `
         Nota: La pista proporcionada anteriormente fue: "${pistaRepetida}". Por favor, proporcione una nueva pista que no sea redundante.
         `;
+    }
+
+    if (contexto_adicional) {
+        prompt += `
+        Información adicional del estudiante:\n${contexto_adicional}
+        `;
+        if (salida_compilador) {
+            prompt += `
+            Nota: El programa del estudiante compiló y produjo esta información adicional correctamente.
+            `;
+        }
     }
 
     return prompt;
@@ -84,7 +95,18 @@ transaccionController.procesarTransaccion = async (req, res) => {
             return res.status(400).json({ message: validationError.message });
         }
 
-        const { id_estudiante, id_tarea, descripcion_tarea, codigo_estudiante, salida_esperada, tipo_retroalimentacion, test_case } = req.body;
+        const {
+            id_estudiante,
+            id_tarea,
+            descripcion_tarea,
+            codigo_estudiante,
+            salida_esperada,
+            tipo_retroalimentacion,
+            test_case,
+            contexto_adicional,
+            salida_compilador
+        } = req.body;
+
         console.log("Código estudiante:", codigo_estudiante);
 
         // 2. Buscar en el historial si ya existe una transacción con el mismo código y retroalimentación
@@ -102,7 +124,7 @@ transaccionController.procesarTransaccion = async (req, res) => {
 
         // 4. Crear el prompt para la IA usando los datos recibidos
         const promptGPT = crearPrompt(retroalimentacion.prompt, descripcion_tarea, salida_esperada, test_case || null);
-        const promptUsuario = crearPromptUsuario(codigo_estudiante, pistaRepetida);
+        const promptUsuario = crearPromptUsuario(codigo_estudiante, pistaRepetida, contexto_adicional, salida_compilador);
 
         console.log("Prompt System");
         console.log(promptGPT);
@@ -127,6 +149,7 @@ transaccionController.procesarTransaccion = async (req, res) => {
             console.error('Error al llamar a la API de GPT:', gptError);
             return res.status(500).json({ message: 'Error al obtener la retroalimentación de GPT.' });
         }
+        console.log(respuestaRetroalimentacion);
 
         // 6. Crear una nueva transacción y guardar en la base de datos
         const nuevaTransaccion = new Transaccion({
@@ -137,7 +160,9 @@ transaccionController.procesarTransaccion = async (req, res) => {
             codigo_gpt: respuestaRetroalimentacion,
             codigo_estudiante,
             tipo_retroalimentacion,
-            test_case: test_case || null
+            test_case: test_case || null,
+            contexto_adicional: contexto_adicional || null,
+            salida_compilador: !!salida_compilador
         });
 
         await nuevaTransaccion.save();
@@ -150,8 +175,11 @@ transaccionController.procesarTransaccion = async (req, res) => {
             salida_esperada,
             codigo_estudiante,
             codigo_gpt: respuestaRetroalimentacion,
-            tipo_retroalimentacion
+            tipo_retroalimentacion,
+            contexto_adicional,
+            salida_compilador
         });
+
 
         // 8. Devolver la respuesta de la IA al cliente (estudiante)
         return res.status(200).json({

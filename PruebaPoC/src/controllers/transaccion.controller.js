@@ -106,8 +106,9 @@ transaccionController.procesarTransaccion = async (req, res) => {
             contexto_adicional,
             salida_compilador
         } = req.body;
-
-        console.log("Código estudiante:", codigo_estudiante);
+        //arranque de time stamp
+        const timestamp_inicio = new Date();
+        //console.log("Código estudiante:", codigo_estudiante);
 
         // 2. Buscar en el historial si ya existe una transacción con el mismo código y retroalimentación
         const { descripcionCoincidente, pistaRepetida } = await buscarCodigoHistorial(id_estudiante, id_tarea, codigo_estudiante, tipo_retroalimentacion);
@@ -126,11 +127,11 @@ transaccionController.procesarTransaccion = async (req, res) => {
         const promptGPT = crearPrompt(retroalimentacion.prompt, descripcion_tarea, salida_esperada, test_case || null);
         const promptUsuario = crearPromptUsuario(codigo_estudiante, pistaRepetida, contexto_adicional, salida_compilador);
 
-        console.log("Prompt System");
-        console.log(promptGPT);
+        //console.log("Prompt System");
+        //console.log(promptGPT);
 
-        console.log("Prompt Usuario");
-        console.log(promptUsuario);
+        //console.log("Prompt Usuario");
+        //console.log(promptUsuario);
 
         // 5. Llamar a la API de GPT para obtener la retroalimentación
         let respuestaRetroalimentacion;
@@ -149,7 +150,10 @@ transaccionController.procesarTransaccion = async (req, res) => {
             console.error('Error al llamar a la API de GPT:', gptError);
             return res.status(500).json({ message: 'Error al obtener la retroalimentación de GPT.' });
         }
-        console.log(respuestaRetroalimentacion);
+        //console.log(respuestaRetroalimentacion);
+
+        //finalizacion de time stamp.
+        const timestamp_fin = new Date();
 
         // 6. Crear una nueva transacción y guardar en la base de datos
         const nuevaTransaccion = new Transaccion({
@@ -177,7 +181,9 @@ transaccionController.procesarTransaccion = async (req, res) => {
             codigo_gpt: respuestaRetroalimentacion,
             tipo_retroalimentacion,
             contexto_adicional,
-            salida_compilador
+            salida_compilador, 
+            timestamp_inicio,
+            timestamp_fin
         });
 
 

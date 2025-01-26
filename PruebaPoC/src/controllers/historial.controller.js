@@ -14,7 +14,9 @@ historialController.guardarHistorial = async ({
     codigo_gpt,
     tipo_retroalimentacion,
     contexto_adicional = null,
-    salida_compilador = null
+    salida_compilador = null,
+    timestamp_inicio,
+    timestamp_fin,
 }) => {
     try {
         // Buscar si ya existe un historial para ese estudiante y tarea
@@ -26,7 +28,9 @@ historialController.guardarHistorial = async ({
             codigo_estudiante,
             tipo_retroalimentacion,
             contexto_adicional: contexto_adicional || null, // Agregar contexto_adicional
-            salida_compilador: !!salida_compilador // Asegurar un valor booleano
+            salida_compilador: !!salida_compilador, // Asegurar un valor booleano,
+            timestamp_inicio,
+            timestamp_fin,
         });
 
         if (historial) {

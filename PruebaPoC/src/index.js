@@ -23,7 +23,7 @@ const startServer = async () => {
     await initializeOpenAI();
     console.log('OpenAI inicializado correctamente.');
 
-    // Usar las rutas de retroalimentación
+    // Usar las rutas de retroalimentación y API
     app.use('/retroalimentacion', retroalimentacionRoutes);
     app.use('/api', transaccionRoutes);
 
